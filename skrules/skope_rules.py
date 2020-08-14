@@ -4,6 +4,7 @@ import pandas
 import numbers
 import six
 from warnings import warn
+from tqdm import tqdm
 
 from sklearn.base import BaseEstimator
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
@@ -322,22 +323,25 @@ class SkopeRules(BaseEstimator):
         else:
             y_reg = y  # same as an other classification bagging
 
-        for clf in clfs:
+        for clf in tqdm(clfs, desc='Fitting Classifiers'):
             clf.fit(X, y)
             self.estimators_ += clf.estimators_
             self.estimators_samples_ += clf.estimators_samples_
             self.estimators_features_ += clf.estimators_features_
 
-        for reg in regs:
+        for reg in tqdm(regs, desc='Fitting Regressors'):
             reg.fit(X, y_reg)
             self.estimators_ += reg.estimators_
             self.estimators_samples_ += reg.estimators_samples_
             self.estimators_features_ += reg.estimators_features_
 
         rules_ = []
-        for estimator, samples, features in zip(self.estimators_,
+        for estimator, samples, features in tqdm(
+                                            zip(self.estimators_,
                                                 self.estimators_samples_,
-                                                self.estimators_features_):
+                                                self.estimators_features_),
+                                            total=len(self.estimators_),
+                                            desc='Extracting Rules'):
 
             # Create mask for OOB samples
             mask = ~indices_to_mask(samples, n_samples)
