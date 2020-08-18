@@ -142,6 +142,27 @@ class SkopeRules(BaseEstimator):
     replacement : bool, default=True
         Whether or not to sample randomly with replacement or not.
 
+    class_weight : dict, list of dict or "balanced", default=None
+        Weights associated with classes in the form {class_label: weight}.
+        If None, all classes are supposed to have weight one.
+        For multi-output problems, a list of dicts can be provided in the
+        same order as the columns of y.
+
+        Note that for multioutput (including multilabel) weights should be
+        defined for each class of every column in its own dict. For example,
+        for four-class multilabel classification weights should be
+        [{0: 1, 1: 1}, {0: 1, 1: 5}, {0: 1, 1: 1}, {0: 1, 1: 1}]
+        instead of [{1: 1}, {2:5}, {3:1}, {4:1}].
+
+        The "balanced" mode uses the values of y to automatically adjust
+        weights inversely proportional to class frequencies in the input
+        data as n_samples / (n_classes * np.bincount(y))
+
+        For multi-output, the weights of each column of y will be multiplied.
+
+        Note that these weights will be multiplied with sample_weight
+        (passed throught the fit method) if sample_weight is specified.
+
     n_jobs : integer, optional (default=1)
         The number of jobs to run in parallel for both `fit` and `predict`.
         If -1, then the number of jobs is set to the number of cores.
@@ -200,6 +221,7 @@ class SkopeRules(BaseEstimator):
                  min_samples_split=2,
                  sampling_strategy=None,
                  replacement=True,
+                 class_weight=None,
                  n_jobs=1,
                  random_state=None,
                  verbose=0):
@@ -230,6 +252,7 @@ class SkopeRules(BaseEstimator):
         self.min_samples_split = min_samples_split
         self.sampling_strategy = sampling_strategy
         self.replacement = replacement
+        self.class_weight = class_weight
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
@@ -311,7 +334,8 @@ class SkopeRules(BaseEstimator):
                     base_estimator=DecisionTreeClassifier(
                         max_depth=max_depth,
                         max_features=self.max_features,
-                        min_samples_split=self.min_samples_split),
+                        min_samples_split=self.min_samples_split,
+                        class_weight=self.class_weight),
                     n_estimators=self.n_estimators,
                     max_samples=self.max_samples_,
                     max_features=self.max_samples_features,
@@ -329,7 +353,8 @@ class SkopeRules(BaseEstimator):
                     base_estimator=DecisionTreeClassifier(
                         max_depth=max_depth,
                         max_features=self.max_features,
-                        min_samples_split=self.min_samples_split),
+                        min_samples_split=self.min_samples_split,
+                        class_weight=self.class_weight),
                     n_estimators=self.n_estimators,
                     max_samples=self.max_samples_,
                     max_features=self.max_samples_features,
