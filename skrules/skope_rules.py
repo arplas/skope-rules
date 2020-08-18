@@ -14,6 +14,8 @@ from sklearn.ensemble import BaggingClassifier, BaggingRegressor
 from sklearn.tree import _tree
 from sklearn.utils import indices_to_mask
 
+from imblearn.ensemble import BalancedBaggingClassifier
+
 from .rule import (Rule, replace_feature_name,
                    get_confusionMatrix, f1_score, mcc_score,
                    precision, recall)
@@ -113,6 +115,33 @@ class SkopeRules(BaseEstimator):
               `ceil(min_samples_split * n_samples)` are the minimum
               number of samples for each split.
 
+    sampling_strategy : float, str, dict, callable, default='None'
+        Sampling information to sample the data set.
+
+        - When 'float', it corresponds to the desired ratio of the number of
+         samples in the minority class over the number of samples in the
+         majority class after resampling.
+
+        .. warnings::
+            'float' is only available for **binary** classification. An error
+            is raised for multi-class classification.
+
+        - When 'str', specify the class targeted by the resampling. The number
+         of samples in the different classes will be equalized.
+         Possible choices are:
+            'majority' : resample only the majority class;
+            'not minority' : resample all classes but the minority class;
+            'not majority' : resample all classes but the majority class;
+            'all' : resample all classes;
+            'auto' : equivalent to 'not minority'
+
+        - When callable, function taking 'y' and returns a 'dict'. The keys
+         correspond to the targeted classes. The values correspond to the
+         desired number of samples for each class.
+
+    replacement : bool, default=True
+        Whether or not to sample randomly with replacement or not.
+
     n_jobs : integer, optional (default=1)
         The number of jobs to run in parallel for both `fit` and `predict`.
         If -1, then the number of jobs is set to the number of cores.
@@ -169,6 +198,8 @@ class SkopeRules(BaseEstimator):
                  max_depth_duplication=None,
                  max_features=1.,
                  min_samples_split=2,
+                 sampling_strategy=None,
+                 replacement=True,
                  n_jobs=1,
                  random_state=None,
                  verbose=0):
@@ -197,6 +228,8 @@ class SkopeRules(BaseEstimator):
         self.max_depth_duplication = max_depth_duplication
         self.max_features = max_features
         self.min_samples_split = min_samples_split
+        self.sampling_strategy = sampling_strategy
+        self.replacement = replacement
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
@@ -273,22 +306,45 @@ class SkopeRules(BaseEstimator):
             if isinstance(self.max_depth, Iterable) else [self.max_depth]
 
         for max_depth in self._max_depths:
-            bagging_clf = BaggingClassifier(
-                base_estimator=DecisionTreeClassifier(
-                    max_depth=max_depth,
-                    max_features=self.max_features,
-                    min_samples_split=self.min_samples_split),
-                n_estimators=self.n_estimators,
-                max_samples=self.max_samples_,
-                max_features=self.max_samples_features,
-                bootstrap=self.bootstrap,
-                bootstrap_features=self.bootstrap_features,
-                # oob_score=... XXX may be added
-                # if selection on tree perf needed.
-                # warm_start=... XXX may be added to increase computation perf.
-                n_jobs=self.n_jobs,
-                random_state=self.random_state,
-                verbose=self.verbose)
+            if self.sampling_strategy is None:
+                bagging_clf = BaggingClassifier(
+                    base_estimator=DecisionTreeClassifier(
+                        max_depth=max_depth,
+                        max_features=self.max_features,
+                        min_samples_split=self.min_samples_split),
+                    n_estimators=self.n_estimators,
+                    max_samples=self.max_samples_,
+                    max_features=self.max_samples_features,
+                    bootstrap=self.bootstrap,
+                    bootstrap_features=self.bootstrap_features,
+                    # oob_score=... XXX may be added
+                    # if selection on tree perf needed.
+                    # warm_start=... XXX may be added
+                    # to increase computation perf.
+                    n_jobs=self.n_jobs,
+                    random_state=self.random_state,
+                    verbose=self.verbose)
+            else:
+                bagging_clf = BalancedBaggingClassifier(
+                    base_estimator=DecisionTreeClassifier(
+                        max_depth=max_depth,
+                        max_features=self.max_features,
+                        min_samples_split=self.min_samples_split),
+                    n_estimators=self.n_estimators,
+                    max_samples=self.max_samples_,
+                    max_features=self.max_samples_features,
+                    bootstrap=self.bootstrap,
+                    bootstrap_features=self.bootstrap_features,
+                    sampling_strategy=self.sampling_strategy,
+                    replacement=self.replacement,
+                    # oob_score=... XXX may be added
+                    # if selection on tree perf needed.
+                    # warm_start=... XXX may be added
+                    # to increase computation perf.
+                    n_jobs=self.n_jobs,
+                    random_state=self.random_state,
+                    verbose=self.verbose
+                    )
 
             bagging_reg = BaggingRegressor(
                 base_estimator=DecisionTreeRegressor(
@@ -302,7 +358,8 @@ class SkopeRules(BaseEstimator):
                 bootstrap_features=self.bootstrap_features,
                 # oob_score=... XXX may be added
                 # if selection on tree perf needed.
-                # warm_start=... XXX may be added to increase computation perf.
+                # warm_start=... XXX may be added
+                # to increase computation perf.
                 n_jobs=self.n_jobs,
                 random_state=self.random_state,
                 verbose=self.verbose)
@@ -325,7 +382,12 @@ class SkopeRules(BaseEstimator):
 
         for clf in tqdm(clfs, desc='Fitting Classifiers'):
             clf.fit(X, y)
-            self.estimators_ += clf.estimators_
+            if self.sampling_strategy is None:
+                self.estimators_ += clf.estimators_
+            else:
+                self.estimators_ += [estimator['classifier']
+                                     for estimator in clf.estimators_
+                                     ]
             self.estimators_samples_ += clf.estimators_samples_
             self.estimators_features_ += clf.estimators_features_
 
